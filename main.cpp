@@ -8,6 +8,7 @@ const TGAColor red   = TGAColor(255, 0,   0,   255);
 const TGAColor green = TGAColor(0, 255,   0,   255);
 const int width = 800;
 const int height = 800;
+Vec3f light_dir(0, 0, -1);
 Model* model = NULL;
 
 void line(Vec2i t0, Vec2i t1, TGAImage &image, TGAColor color)
@@ -91,7 +92,26 @@ int main(int argc, char** argv) {
 	
 	// rendering triangles
 	Vec2i pts[3] = { Vec2i(10,10), Vec2i(100, 30), Vec2i(190, 160) };
-	triangle(pts, image, red);
+
+	for (int i = 0; i < model->nfaces(); i++) {
+		std::vector<int> face = model->face(i);
+		Vec2i screen_coords[3];
+		Vec3f world_coords[3];
+		for (int j = 0; j < 3; j++) {
+			Vec3f v = model->vert(face[j]);
+			screen_coords[j] = Vec2i((v.x + 1.) * width / 2. ,
+									 (v.y + 1.) * height / 2.);
+			world_coords[j] = v;
+		}
+
+		Vec3f n = (world_coords[2] - world_coords[0]) ^ (world_coords[1] - world_coords[0]);
+		n.normalize();
+
+		float intensity = n * light_dir;
+		
+		if (intensity > 0.f)
+			triangle(screen_coords, image, TGAColor(intensity * 255, intensity * 255, intensity * 255, 255));
+	}
 
 	image.flip_vertically(); 
 	image.write_tga_file("output.tga");
