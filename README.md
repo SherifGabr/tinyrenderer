@@ -2,4 +2,4 @@
 
 <img src="tinyrenderer.png" alt="Cover image">
 
-An experimental renderer.
+An experimental raytracer to implement rasterization, ambient occlusion, shadow mapping and more.
