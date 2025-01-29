@@ -15,9 +15,10 @@ const int width = 800;
 const int height = 800;
 const int depth = 255;
 
-Vec3f light_dir(0, 0, -1);
 Model* model = NULL;
-Vec3f camera(0, 0, 3);
+Vec3f light_dir = Vec3f(1,-1,1).normalize();
+Vec3f eye(1,1,3);
+Vec3f center(0,0,0);
 
 void line(Vec2i t0, Vec2i t1, TGAImage &image, TGAColor color)
 {
@@ -99,7 +100,7 @@ Vec3f barycentric(Vec3f A, Vec3f B, Vec3f C, Vec3f P)
 	return Vec3f(-1, 1, 1); // in this case generate negative coordinates, it will be thrown away by the rasterizer
 }
 
-void triangle(Vec3i t0, Vec3i t1, Vec3i t2, Vec2i uv0, Vec2i uv1, Vec2i uv2, TGAImage &image, float intensity, int *zbuffer) {
+void triangle(Vec3i t0, Vec3i t1, Vec3i t2, Vec2i uv0, Vec2i uv1, Vec2i uv2, TGAImage &image, float *intensity, int *zbuffer) {
 	if (t0.y==t1.y && t0.y==t2.y) return; // i dont care about degenerate triangles
     if (t0.y>t1.y) { std::swap(t0, t1); std::swap(uv0, uv1); }
     if (t0.y>t2.y) { std::swap(t0, t2); std::swap(uv0, uv2); }
@@ -124,10 +125,24 @@ void triangle(Vec3i t0, Vec3i t1, Vec3i t2, Vec2i uv0, Vec2i uv1, Vec2i uv2, TGA
             if (zbuffer[idx]<P.z) {
                 zbuffer[idx] = P.z;
                 TGAColor color = model->diffuse(uvP);
-                image.set(P.x, P.y, TGAColor(color.r*intensity, color.g*intensity, color.b*intensity));
+                image.set(P.x, P.y, TGAColor(color.r*intensity[0], color.g*intensity[1], color.b*intensity[2]));
             }
         }
     }
+}
+
+Matrix lookat(Vec3f eye, Vec3f center, Vec3f up) {
+    Vec3f z = (eye-center).normalize();
+    Vec3f x = (up^z).normalize();
+    Vec3f y = (z^x).normalize();
+	Matrix res = Matrix::identity(4);
+    for (int i=0; i<3; i++) {
+        res[0][i] = x[i];
+        res[1][i] = y[i];
+        res[2][i] = z[i];
+        res[i][3] = -center[i];
+    }
+    return res;
 }
 
 int main(int argc, char** argv) {
@@ -137,38 +152,41 @@ int main(int argc, char** argv) {
 	int* zbuffer = new int[width * height];
 	std::fill(zbuffer, zbuffer + width * height, std::numeric_limits<int>::min());
 
-	Matrix Projection = Matrix::identity(4);
-	Matrix ViewPort   = viewport(width/8, height/8, width*3/4, height*3/4);
 
-	Projection[3][2] = -1.f/camera.z;
 
 	// draw the model
+	Matrix ModelView = lookat(eye, center, Vec3f(0, 1, 0));
+	Matrix Projection = Matrix::identity(4);
+	Matrix ViewPort   = viewport(width/8, height/8, width*3/4, height*3/4);
+	Projection[3][2] = -1.f/eye.z;
+
 	for (int i = 0; i < model->nfaces(); i++) {
 		std::vector<int> face = model->face(i);
 
 		Vec3f screen_coords[3];
 		Vec3f world_coords[3];
-		
+		float intensity[3];
+
 		// looping vertices in face
 		for (int j = 0; j < 3; j++) {
 			Vec3f v = model->vert(face[j]);
-			screen_coords[j] = m2v(ViewPort*Projection*v2m(v));
+			screen_coords[j] = Vec3f(ViewPort*Projection*ModelView*Matrix(v));
 			world_coords[j] = v;
+			intensity[j] = model->norm(i, j) * light_dir;
 		}
 
-		Vec3f n = (world_coords[2] - world_coords[0])^(world_coords[1] - world_coords[0]);
-		n.normalize();
+		// Vec3f n = (world_coords[2] - world_coords[0])^(world_coords[1] - world_coords[0]);
+		// n.normalize();
 
-		float intensity = n * light_dir;
+		// float intensity = n * light_dir;
 		
-		if (intensity > 0) {
 			Vec2i uv[3];
 			
 			for (int k = 0; k < 3; k++)
 				uv[k] = model->uv(i, k);
 			
 			triangle(screen_coords[0], screen_coords[1], screen_coords[2], uv[0], uv[1], uv[2], image, intensity, zbuffer);
-		}
+		
 	}	
 	
 	image.flip_vertically(); 
